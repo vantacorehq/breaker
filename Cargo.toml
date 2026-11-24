@@ -10,3 +10,7 @@ categories = ["network-programming", "concurrency"]
 readme = "README.md"
 
 [dependencies]
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
