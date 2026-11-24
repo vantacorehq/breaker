@@ -44,6 +44,13 @@ breaker = { git = "https://github.com/vantacorehq/breaker" }
 use breaker::{Breaker, Config};
 use std::time::Duration;
 
+// Use defaults and override only what you need
+let mut cb = Breaker::new(Config {
+    failure_threshold: 3,
+    ..Config::default()
+});
+
+// Or build explicitly
 let mut cb = Breaker::new(Config {
     failure_threshold: 5,
     success_threshold: 2,
@@ -58,6 +65,8 @@ if cb.allow() {
     }
 }
 ```
+
+`Config` implements `Default` (failure_threshold: 5, success_threshold: 2, open_duration: 30s, half_open_max_calls: 1).
 
 ### Convenient `call` helper
 
@@ -105,6 +114,8 @@ pub struct Config {
     pub open_duration: Duration,     // how long to stay Open
     pub half_open_max_calls: u32,    // max simultaneous probes in Half-Open (default 1)
 }
+
+impl Default for Config { /* failure=5, success=2, open=30s, half_open_max=1 */ }
 ```
 
 ## API
@@ -112,6 +123,7 @@ pub struct Config {
 ```rust
 impl Breaker {
     pub fn new(config: Config) -> Self;
+    pub fn with_defaults() -> Self;  // uses Config::default()
     pub fn allow(&mut self) -> bool;
     pub fn on_success(&mut self);
     pub fn on_failure(&mut self);
