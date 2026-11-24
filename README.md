@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="banner.svg" alt="breaker" width="100%">
+  <img src="https://raw.githubusercontent.com/vantacorehq/breaker/main/banner.svg" alt="breaker" width="100%">
 </p>
 
 <p align="center">
