@@ -1,8 +1,8 @@
 [package]
 name = "breaker"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
-description = "Circuit breaker in pure Rust. Closed → Open → Half-Open. Configurable thresholds, cooldown, success count. Zero dependencies."
+description = "Circuit breaker in pure Rust. Closed → Open → Half-Open. Probe limit, call() helper, SyncBreaker. Zero dependencies."
 license = "MIT"
 repository = "https://github.com/vantacorehq/breaker"
 keywords = ["circuit-breaker", "resilience", "fault-tolerance", "rust", "zero-dependency"]

@@ -1,40 +1,32 @@
-//! Simple demonstration of the circuit breaker.
+//! Demonstration of the circuit breaker with half-open limit and call() helper.
 
 use breaker::{Breaker, Config};
 use std::time::Duration;
 
 fn main() {
-    let mut cb = Breaker::new(Config {
-        failure_threshold: 3,
-        success_threshold: 2,
-        open_duration: Duration::from_secs(2),
-    });
+    let mut cb = Breaker::new(
+        Config::new(3, 2, Duration::from_secs(2)).with_half_open_max_calls(1),
+    );
 
     println!("=== breaker demo ===\n");
 
-    // Simulate a flaky dependency
-    for i in 1..=15 {
-        if !cb.allow() {
-            println!("{:02}  rejected (state = {:?})", i, cb.state());
-            std::thread::sleep(Duration::from_millis(300));
-            continue;
-        }
-
-        // Fail the first few calls on purpose
-        let result = if i <= 4 { Err(()) } else { Ok(()) };
+    for i in 1..=18 {
+        let result = cb.call(|| {
+            // Fail the first few calls on purpose
+            if i <= 4 {
+                Err("downstream error")
+            } else {
+                Ok(i * 10)
+            }
+        });
 
         match result {
-            Ok(()) => {
-                cb.on_success();
-                println!("{:02}  success   (state = {:?})", i, cb.state());
-            }
-            Err(()) => {
-                cb.on_failure();
-                println!("{:02}  failure   (state = {:?})", i, cb.state());
-            }
+            None => println!("{:02}  rejected (state = {:?})", i, cb.state()),
+            Some(Ok(v)) => println!("{:02}  success  → {}  (state = {:?})", i, v, cb.state()),
+            Some(Err(e)) => println!("{:02}  failure  → {}  (state = {:?})", i, e, cb.state()),
         }
 
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(250));
     }
 
     println!("\nFinal stats: {:?}", cb.stats());

@@ -12,7 +12,7 @@
 **Circuit breaker in pure Rust.**
 
 Closed → Open → Half-Open.  
-Configurable failure threshold, cooldown, success threshold, and live stats.
+Configurable failure threshold, cooldown, success threshold, and **probe limit** in Half-Open.
 
 Zero dependencies. Only `std`.
 
@@ -21,15 +21,15 @@ Zero dependencies. Only `std`.
 ## Why
 
 When a downstream service starts failing, you stop hammering it.  
-The breaker counts consecutive failures. After the threshold it opens and rejects calls for a cooldown. Then it allows a few probes (half-open). Successes close it again; failures reopen it.
+The breaker counts consecutive failures. After the threshold it opens and rejects calls for a cooldown. Then it allows a limited number of probes (half-open). Successes close it again; failures reopen it.
 
 ## States
 
-| State     | Behaviour                                    |
-|-----------|----------------------------------------------|
-| Closed    | Calls go through. Failures are counted.      |
-| Open      | Calls rejected immediately.                  |
-| Half-Open | Limited probe calls allowed.                 |
+| State     | Behaviour                                              |
+|-----------|--------------------------------------------------------|
+| Closed    | Calls go through. Failures are counted.                |
+| Open      | Calls rejected immediately.                            |
+| Half-Open | Only up to `half_open_max_calls` probes are allowed.   |
 
 ## Quick start
 
@@ -38,45 +38,72 @@ The breaker counts consecutive failures. After the threshold it opens and reject
 breaker = { git = "https://github.com/vantacorehq/breaker" }
 ```
 
+### Manual control
+
 ```rust
 use breaker::{Breaker, Config};
 use std::time::Duration;
 
-fn main() {
-    let mut cb = Breaker::new(Config {
-        failure_threshold: 5,
-        success_threshold: 2,
-        open_duration: Duration::from_secs(30),
-    });
+let mut cb = Breaker::new(Config {
+    failure_threshold: 5,
+    success_threshold: 2,
+    open_duration: Duration::from_secs(30),
+    half_open_max_calls: 1,   // only one probe at a time
+});
 
-    for _ in 0..20 {
-        if !cb.allow() {
-            println!("circuit open — skipping");
-            continue;
-        }
-
-        match do_work() {
-            Ok(_) => cb.on_success(),
-            Err(_) => cb.on_failure(),
-        }
-
-        println!("state = {:?}, stats = {:?}", cb.state(), cb.stats());
+if cb.allow() {
+    match do_work() {
+        Ok(v) => cb.on_success(),
+        Err(_) => cb.on_failure(),
     }
 }
+```
 
-fn do_work() -> Result<(), ()> {
-    // your call here
-    Ok(())
+### Convenient `call` helper
+
+```rust
+match cb.call(|| do_work()) {
+    None => {
+        // circuit open — rejected
+    }
+    Some(Ok(v)) => {
+        // success
+    }
+    Some(Err(e)) => {
+        // failure (already recorded)
+    }
 }
 ```
+
+### Multi-threaded usage
+
+`Breaker` itself requires `&mut self` (single-threaded by design).
+
+For concurrent backends use the ready-made wrapper:
+
+```rust
+use breaker::SyncBreaker;
+
+let cb = SyncBreaker::with_defaults();   // &self methods, Mutex inside
+
+if cb.allow() {
+    // ...
+}
+
+// or
+let result = cb.call(|| do_work());
+```
+
+You can also wrap the plain `Breaker` yourself with `Mutex` / `RwLock`.
 
 ## Config
 
 ```rust
 pub struct Config {
-    pub failure_threshold: u32,   // consecutive failures → Open
-    pub success_threshold: u32,   // consecutive successes in Half-Open → Closed
-    pub open_duration: Duration,  // how long to stay Open
+    pub failure_threshold: u32,      // consecutive failures → Open
+    pub success_threshold: u32,      // consecutive successes in Half-Open → Closed
+    pub open_duration: Duration,     // how long to stay Open
+    pub half_open_max_calls: u32,    // max simultaneous probes in Half-Open (default 1)
 }
 ```
 
@@ -88,13 +115,14 @@ impl Breaker {
     pub fn allow(&mut self) -> bool;
     pub fn on_success(&mut self);
     pub fn on_failure(&mut self);
+    pub fn call<T, E>(&mut self, f: impl FnOnce() -> Result<T, E>) -> Option<Result<T, E>>;
     pub fn state(&self) -> State;
     pub fn stats(&self) -> Stats;
     pub fn reset(&mut self);
 }
 ```
 
-`Stats` contains total calls, successes, failures and how many times the circuit opened.
+`Stats` tracks total calls, successes, failures, times opened, and rejected calls.
 
 ## Run tests
 
